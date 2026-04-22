@@ -227,11 +227,10 @@ bash run_bash/evaluate.sh <gen_path> <ref_stats.npz> [out.json] [num_gpus]
 ## Citation
 
 ```bibtex
-@inproceedings{zhang2026rsd,
+@inproceedings{zhangscore,
   title={Score Distillation Beyond Acceleration: Generative Modeling from Corrupted Data},
   author={Zhang, Yasi and Chen, Tianyu and Wang, Zhendong and Wu, Ying Nian and Zhou, Mingyuan and Leong, Oscar},
-  booktitle={International Conference on Learning Representations},
-  year={2026}
+  booktitle={The Fourteenth International Conference on Learning Representations}
 }
 ```
 
@@ -239,4 +238,4 @@ bash run_bash/evaluate.sh <gen_path> <ref_stats.npz> [out.json] [num_gpus]
 
 ## Acknowledgements
 
-This codebase builds upon [EDM](https://github.com/NVlabs/edm) (Karras et al., 2022) and [RSD](https://github.com/mingyuanzhou/RSD) (Zhou et al., 2024). We thank the authors for releasing their code.
+This codebase builds upon [EDM](https://github.com/NVlabs/edm) (Karras et al., 2022) and [SiD](https://github.com/mingyuanzhou/sid) (Zhou et al., 2024). We thank the authors for releasing their code.

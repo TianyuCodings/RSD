@@ -230,7 +230,8 @@ bash run_bash/evaluate.sh <gen_path> <ref_stats.npz> [out.json] [num_gpus]
 @inproceedings{zhangscore,
   title={Score Distillation Beyond Acceleration: Generative Modeling from Corrupted Data},
   author={Zhang, Yasi and Chen, Tianyu and Wang, Zhendong and Wu, Ying Nian and Zhou, Mingyuan and Leong, Oscar},
-  booktitle={The Fourteenth International Conference on Learning Representations}
+  booktitle={The Fourteenth International Conference on Learning Representations},
+  year={2026}
 }
 ```
 

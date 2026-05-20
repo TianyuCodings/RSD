@@ -3,8 +3,7 @@
 **[ICLR 2026 Poster]** Official PyTorch implementation of:
 
 > **Score Distillation Beyond Acceleration: Generative Modeling from Corrupted Data**  
-> Yasi Zhang\*, Tianyu Chen\*, Zhendong Wang, Ying Nian Wu, Mingyuan Zhou, Oscar Leong  
-> (\* Equal contribution)  
+> [Yasi Zhang](https://yasminzhang.github.io/)<sup>†</sup>, [Tianyu Chen](https://tianyucodings.github.io/)<sup>†</sup>, Zhendong Wang, Ying Nian Wu, Mingyuan Zhou, [Oscar Leong](https://www.oscarleong.com/publications)  
 > [arXiv:2505.13377](https://arxiv.org/abs/2505.13377) | [OpenReview](https://openreview.net/forum?id=ROGCckKICU)
 
 ---

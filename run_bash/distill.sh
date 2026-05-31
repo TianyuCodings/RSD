@@ -14,8 +14,8 @@ FFHQ_DATA="/path/to/ffhq-64x64.zip"
 FFHQ_STAT="/path/to/ffhq-64x64.npz"
 CELEBA_DATA="/path/to/celeba_hq-64x64.zip"
 CELEBA_STAT="/path/to/celeba_hq-64x64.npz"
-AFHQ_DATA="/path/to/afhqv2-64x64.zip"
-AFHQ_STAT="/path/to/afhqv2-64x64.npz"
+AFHQ_DATA="data/afhqv2-64x64.zip"
+AFHQ_STAT="data/afhqv2-64x64.npz"
 CIFAR10_DATA="/path/to/cifar10-32x32.zip"
 CIFAR10_STAT="https://nvlabs-fi-cdn.nvidia.com/edm/fid-refs/cifar10-32x32.npz"
 # ============================================================
@@ -78,8 +78,8 @@ python -m torch.distributed.run --standalone --nproc_per_node=$NUM_GPUS rsd_trai
     --arch ddpmpp \
     --edm_model $EDM_MODEL \
     --metrics fid50k_full \
-    --tick 10 \
-    --snap 50 \
+    --tick ${TICK:-10} \
+    --snap ${SNAP:-50} \
     --dump 500 \
     --lr $lr \
     --glr $glr \
@@ -87,7 +87,7 @@ python -m torch.distributed.run --standalone --nproc_per_node=$NUM_GPUS rsd_trai
     --fp16 $fp16 \
     --ls 1 \
     --lsg 100 \
-    --duration 100 \
+    --duration ${DURATION:-100} \
     --data_stat $data_stat \
     --sigma=$sigma \
     --corruption_probability=$corruption_probability \

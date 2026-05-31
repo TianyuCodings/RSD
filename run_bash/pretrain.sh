@@ -11,7 +11,7 @@
 # Set dataset paths before running
 FFHQ_DATA="/path/to/ffhq-64x64.zip"
 CELEBA_DATA="/path/to/celeba_hq-64x64.zip"
-AFHQ_DATA="/path/to/afhqv2-64x64.zip"
+AFHQ_DATA="data/afhqv2-64x64.zip"
 CIFAR10_DATA="/path/to/cifar10-32x32.zip"
 # ============================================================
 
@@ -54,7 +54,7 @@ esac
 EXTRA_ARGS="--arch=$arch --dropout=$dropout --augment=$augment --batch=$batch --lr=$lr"
 if [ -n "$cres" ]; then EXTRA_ARGS="$EXTRA_ARGS --cres=$cres"; fi
 
-python -m torch.distributed.run --nproc_per_node=$NUM_GPUS train.py \
+python -m torch.distributed.run --standalone --nproc_per_node=$NUM_GPUS train.py \
     --outdir=$outdir \
     --data=$dataset_path \
     --sigma=$sigma \
@@ -63,4 +63,7 @@ python -m torch.distributed.run --nproc_per_node=$NUM_GPUS train.py \
     --consistency_coeff=$consistency_coeff \
     --expr_id="${DATASET}_cp${corruption_probability}_sigma${sigma}_dp${dp}_cc${consistency_coeff}" \
     --cond=0 \
+    --duration=${DURATION:-200} \
+    --tick=${TICK:-50} \
+    --snap=${SNAP:-50} \
     $EXTRA_ARGS

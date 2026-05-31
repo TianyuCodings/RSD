@@ -251,16 +251,9 @@ For distillation, use the scripts in `./inpainting/run_bash`
 
 
 
-## TODO
-
-- [x] Release pretrained checkpoints for noisy CelebA-HQ, FFHQ, and AFHQ
-- [x] test inference code script
-- [x] test training code script
-- [ ] Release code and checkpoints for general operator (deblurring, super-resolution)
-- [ ] Release code and checkpoints for random masking operator (inpainting)
-- [ ] Release code and checkpoints for MRI operator (FastMRI reconstruction)
-
----
+```
+Feel free to raise an issue if you have any questions on the codebase. 
+```
 
 ## Citation
 

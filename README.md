@@ -182,66 +182,52 @@ bash run_bash/generate_rsd.sh <network_pkl> [outdir]
 bash run_bash/evaluate.sh <gen_path> <ref_stats.npz> [out.json] [num_gpus]
 ```
 
----
+For example, the end-to-end pipeline for AFHQ-v2 (one-step generation + FID) on 8 GPUs, run from the repository root:
 
-## Results
+```bash
+# Inputs
+CKPT=ckpts/afhqv2_rsd.pkl                  # distilled RSD generator (Stage 2 .pkl)
+REF_NPZ=data/afhqv2-64x64.npz              # FID reference stats
+OUTDIR=outputs/afhq_rsd_eval               # 50K PNGs land here
+FID_JSON=outputs/afhq_rsd_fid.json
 
-### Noisy Image Generation (Gaussian noise, σ=0.2)
+NUM_GPUS=8
+NUM_SAMPLES=50000
 
-| Dataset | Teacher (Truncated) FID | **RSD (1-step) FID** |
-|---------|------------------------|----------------------|
-| CIFAR-10 | 12.21 | **4.77** |
-| CelebA-HQ | 13.90 | **6.48** |
+mkdir -p "$(dirname "$OUTDIR")"
 
-### CIFAR-10 Across Noise Levels
+# Step 1 — one-step generation (sigma_G=2.5 matches --init_sigma from distill.sh)
+python -m torch.distributed.run --standalone --nproc_per_node=$NUM_GPUS \
+    scripts/rsd_generate_onestep.py \
+    --network=$CKPT \
+    --outdir=$OUTDIR \
+    --seeds=0-$((NUM_SAMPLES-1)) \
+    --batch=64 \
+    --num=$NUM_SAMPLES \
+    --sigma_G=2.5
 
-| Noise σ | Teacher-Full | Teacher-Truncated | RSD |
-|---------|--------------|-------------------|-----|
-| 0.1 | 25.55 | 7.55 | **3.98** |
-| 0.2 | 60.73 | 12.21 | **4.77** |
-| 0.4 | 124.28 | 22.12 | **21.63** |
+# Step 2 — FID + Inception Score (pass the PNG directory, not the .npz)
+python scripts/eval_fid.py \
+    --gen_path=$OUTDIR \
+    --ref_stats=$REF_NPZ \
+    --out_path=$FID_JSON \
+    --batch_size=128
+cat $FID_JSON
+```
 
-### Full Metrics (CIFAR-10, σ=0.2)
+On an 8× A800 node this completes in ~38 s for generation and ~2 min for FID, yielding `FID ≈ 5.39`, `IS ≈ 8.02` for the released AFHQ-v2 σ=0.2 checkpoint. If the default `--master_port=29500` is in use, append `--master_port=<free port>` to the `torch.distributed.run` command.
 
-| Metric | Teacher | RSD |
-|--------|---------|-----|
-| FID ↓ | 12.21 | **4.77** |
-| IS ↑ | 8.31 | **9.16** |
-| Precision ↑ | 0.59 | **0.65** |
-| Recall ↑ | 0.41 | **0.56** |
 
-### Random Inpainting (CelebA-HQ, noiseless)
 
-| Missing Rate | Teacher FID | RSD FID |
-|-------------|-------------|---------|
-| 60% | 6.08 | **4.44** |
-| 80% | 11.19 | **7.10** |
-| 90% | 25.53 | **16.86** |
+## MRI experiments
 
-![Qualitative results for random inpainting (p=0.9). Each pair shows the corrupted input and the RSD generation output.](figs/figure9.png)
-
-### Multi-coil MRI Reconstruction (FastMRI)
-
-| Acceleration | L1-EDM | Teacher | RSD |
-|-------------|--------|---------|-----|
-| R=2 | 18.55 | 30.34 | **12.95** |
-| R=4 | 27.64 | 32.31 | **10.71** |
-| R=6 | 51.43 | 31.50 | **14.64** |
-| R=8 | 102.98 | 48.15 | **22.51** |
-
-**Sampling speedup:** ~30× faster than the teacher (50k samples in ~20 sec vs. ~10 min on CIFAR-10).
-
----
-
-## Pretrained Models
-
-FFHQ, CelebA-HQ, and AFHQ-v2 (σ=0.2) checkpoints are available in the [Denoising Score Distillation collection](https://huggingface.co/collections/yasiz/denoising-score-distillation-ckpts) — see [Checkpoints download](#checkpoints-download) above. CIFAR-10 checkpoints will be released soon.
-
----
+Please checkout MRI_README.md
 
 ## TODO
 
 - [x] Release pretrained checkpoints for noisy CelebA-HQ, FFHQ, and AFHQ
+- [x] test inference code script
+- [x] test training code script
 - [ ] Release code and checkpoints for general operator (deblurring, super-resolution)
 - [ ] Release code and checkpoints for random masking operator (inpainting)
 - [ ] Release code and checkpoints for MRI operator (FastMRI reconstruction)

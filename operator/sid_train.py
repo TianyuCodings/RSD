@@ -18,6 +18,7 @@ import click
 import torch
 import dnnlib
 import wandb
+import ambient_utils
 
 from torch_utils import distributed as dist
 from training import sid_training_loop as training_loop
@@ -60,7 +61,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--data_stat',     help='Path to the dataset stats', metavar='ZIP|DIR',               type=str, default=None)
 @click.option('--cond',          help='Train class-conditional model', metavar='BOOL',              type=bool, default=False, show_default=True)
 @click.option('--arch',          help='Network architecture', metavar='ddpmpp|ncsnpp|adm',          type=click.Choice(['ddpmpp', 'ncsnpp', 'adm']), default='ddpmpp', show_default=True)
-@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm|ambient',       type=click.Choice(['vp', 've', 'edm', 'ambient']), default='ambient', show_default=True)
+@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm',       type=click.Choice(['vp', 've', 'edm']), default='edm', show_default=True)
 
 # Hyperparameters.
 @click.option('--duration',      help='Training duration', metavar='MIMG',                          type=click.FloatRange(min=0, min_open=True), default=200, show_default=True)
@@ -73,23 +74,13 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--augment',       help='Augment probability', metavar='FLOAT',                       type=click.FloatRange(min=0, max=1), default=0.12, show_default=True)
 @click.option('--xflip',         help='Enable dataset x-flips', metavar='BOOL',                     type=bool, default=False, show_default=True)
 
-# TODO: not sure if we need these two options
-@click.option('--max_grad_norm', help='Max norm for gradients.', metavar='FLOAT', type=click.FloatRange(min=0), default=None, show_default=True)
-@click.option('--weight_decay', help='Value of weight decay. Set to 0. to disable.', metavar='FLOAT', type=click.FloatRange(min=0), default=0., show_default=True)
-
-# Stochastic Sampling
-@click.option('--S_churn',  help='Amount of stochasticity', metavar='S_churn', type=click.FloatRange(min=0, max=float('inf')), default=10.0, show_default=True)
-@click.option('--S_min',  help='Saturation lower bound', metavar='S_min', type=click.FloatRange(min=0, max=1), default=0.01, show_default=True)
-@click.option('--S_max',  help='Saturation upper bound', metavar='S_max', type=click.FloatRange(min=0, max=1), default=1.0, show_default=True)
-@click.option('--S_noise',  help='S_noise', metavar='S_noise', type=click.FloatRange(min=0, max=float('inf')), default=1.007, show_default=True)
-
-
 # Performance-related.
 @click.option('--bench',         help='Enable cuDNN benchmarking', metavar='BOOL',                  type=bool, default=True, show_default=True)
 @click.option('--cache',         help='Cache dataset in CPU memory', metavar='BOOL',                type=bool, default=True, show_default=True)
 @click.option('--workers',       help='DataLoader worker processes', metavar='INT',                 type=click.IntRange(min=1), default=1, show_default=True)
 
 # I/O-related.
+@click.option("--expr_id", help="Experiment ID", type=str, default="test")
 @click.option('--desc',          help='String to include in result dir name', metavar='STR',        type=str)
 @click.option('--nosubdir',      help='Do not create a subdirectory for results',                   is_flag=True)
 @click.option('--tick',          help='How often to print progress', metavar='KIMG',                type=click.IntRange(min=1), default=50, show_default=True)
@@ -99,8 +90,8 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--transfer',      help='Transfer learning from network pickle', metavar='PKL|URL',   type=str)
 @click.option('--resume',        help='Resume from previous training state', metavar='PT',          type=str)
 @click.option('-n', '--dry-run', help='Print training options and exit',                            is_flag=True)
-@click.option('--metrics',       help='Comma-separated list or "none" [default: fid50k_full]',      type=CommaSeparatedList(), default='fid50k_full', show_default=True)
-@click.option('--edm_model',     help='edm_model', type=str)
+@click.option('--metrics',       help='Comma-separated list or "none" [default: fid50k_full]',      type=CommaSeparatedList())
+@click.option('--edm_model',     help='Path for pretrained edm_model', type=str)
 
 
 # Parameters for SiD
@@ -114,24 +105,22 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--glr',           help='Learning rate of fake data generator', metavar='FLOAT',      type=click.FloatRange(min=0, min_open=True), default=1e-5, show_default=True)
 @click.option('--g_beta1',           help='beta_1 of the Adam optimizer for generator', metavar='FLOAT',      type=click.FloatRange(min=0, min_open=False), default=0, show_default=True)
 
-# Ambient diffusion
-@click.option('--corruption_probability', help='Probability of corrupting a single pixel from the dataset', metavar='FLOAT', default=0.4, show_default=True)
-@click.option('--delta_probability', help='Probability of corrupting a pixel that survived', metavar='FLOAT', default=0.1, show_default=True)
-@click.option('--mask_full_rgb', help='Whether to mask all the RGB channels together', metavar='BOOL', default=False, show_default=True)
-@click.option('--norm', help='Norm for loss', default=2, show_default=True)
-@click.option('--normalize', help='Normalization for training', default=True, show_default=True)
-@click.option('--gated', help='Whether to use gated convolutions', metavar='BOOL', default=True, show_default=True)
-@click.option('--corruption_pattern', help='Corruption pattern', metavar='dust|box|downscale|fixed_box', default='dust', show_default=True, required=False)
-@click.option('--max_size', help='Limit training samples.', type=int, default=None, show_default=True)
 
-# wandb
-@click.option('--experiment_name', help='Name for the experiment to run', type=str, default=None, required=False, show_default=True)
+# Scaling laws related
+@click.option("--corruption_probability", help="Controls what percentage of images should be corrupted.", type=float, default=0.0)
+@click.option("--sigma", help="How much noise to add to the corrupted images.", type=float, default=0.0)
+@click.option('--dataset_keep_percentage', help='Limit training samples.', type=float, default=1.0, show_default=True)
 
+# Consistency params
+@click.option("--consistency_batch_size", help="Batch size for the consistency loss.", type=int, default=32)
+@click.option("--with_weight", help="Whether to use weight in the consistency loss.", type=bool, default=False)
+@click.option("--with_grad", help="Whether to use gradient in the consistency loss.", type=bool, default=True)
+@click.option("--num_consistency_steps", help="Number of steps for the consistency loss.", type=int, default=6)
+@click.option("--num_primes", help="Number of primes for the consistency loss.", type=int, default=6)
+@click.option("--consistency_coeff", help="Coefficient for the consistency loss.", type=float, default=0.0)
 
-
-
-
-
+# A params
+@click.option("--operator", help="Operator for the ambient training.", type=str, default="identity")
 
 
 def main(**kwargs):
@@ -170,52 +159,36 @@ Pretrained Diffusion Models for One-Step Generation".
     opts = dnnlib.EasyDict(kwargs)
     torch.multiprocessing.set_start_method('spawn')
     dist.init()
-    
+
+    if key := os.environ.get("WANDB_API_KEY"):
+        wandb.login(key=key)
+
     if dist.get_rank() == 0:
-        if key := os.environ.get("WANDB_API_KEY"):
-            wandb.login(key=key)
-        wandb.init(
-            project="ambient_diffusion_mri_sid",
-            config=kwargs,
-            name=opts.experiment_name,
-            id=wandb.util.generate_id(),
-            resume="never",
-            entity="ambient_ty"
-        )
+        wandb.init(project="ambient_A",
+                   config=opts, name=opts.expr_id,
+                   dir=opts.outdir)
 
-
-    # Initialize config dict.
+# Initialize config dict.
     c = dnnlib.EasyDict()
-    c.update(max_grad_norm=opts.max_grad_norm)
-
-    if "numpy" in opts.data:
-        c.dataset_kwargs = dnnlib.EasyDict(class_name='training.dataset.NumpyFolderDataset', path=opts.data, use_labels=opts.cond, xflip=opts.xflip, cache=opts.cache, 
-                                       corruption_probability=opts.corruption_probability, delta_probability=opts.delta_probability, mask_full_rgb=opts.mask_full_rgb,
-                                       corruption_pattern=opts.corruption_pattern, normalize=opts.normalize, precond=opts.precond)
-    else:
-        c.dataset_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=opts.data, use_labels=opts.cond, xflip=opts.xflip, cache=opts.cache, 
-                                       corruption_probability=opts.corruption_probability, delta_probability=opts.delta_probability, mask_full_rgb=opts.mask_full_rgb,
-                                       corruption_pattern=opts.corruption_pattern, normalize=opts.normalize)
+    c.dataset_kwargs = dnnlib.EasyDict(path=opts.data, use_labels=opts.cond, xflip=opts.xflip, cache=opts.cache, sigma=opts.sigma,
+                                       corruption_probability_per_image=opts.corruption_probability, corruption_probability_per_pixel=1.0,
+                                       only_positive=False, operator=opts.operator)
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=opts.workers, prefetch_factor=2)
     c.network_kwargs = dnnlib.EasyDict()
     c.loss_kwargs = dnnlib.EasyDict()
 
-    # TODO: MRI use AdamW when weight_decay is greater than 0
     c.fake_score_optimizer_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=opts.lr, betas=[0.0, 0.999], eps = 1e-8 if not opts.fp16 else 1e-6)
     c.g_optimizer_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=opts.glr, betas=[opts.g_beta1, 0.999], eps = 1e-8 if not opts.fp16 else 1e-6)
 
     c.init_sigma = opts.init_sigma
 
     # Validate dataset options.
-    # Validate dataset options.
     try:
-        dataset_obj = dnnlib.util.construct_class_by_name(**c.dataset_kwargs)
+        dataset_obj = ambient_utils.dataset_utils.ImageFolderDataset(**c.dataset_kwargs)
         dataset_name = dataset_obj.name
         c.dataset_kwargs.resolution = dataset_obj.resolution # be explicit about dataset resolution
-        if opts.max_size is None:
-            c.dataset_kwargs.max_size = len(dataset_obj) # be explicit about dataset size
-        else:
-            c.dataset_kwargs.max_size = min(len(dataset_obj), opts.max_size)
+        c.dataset_kwargs.max_size = int(len(dataset_obj) * opts.dataset_keep_percentage)
+        c.dataset_kwargs.dataset_keep_percentage = opts.dataset_keep_percentage
         if opts.cond and not dataset_obj.has_labels:
             raise click.ClickException('--cond=True requires labels specified in dataset.json')
         del dataset_obj # conserve memory
@@ -225,23 +198,30 @@ Pretrained Diffusion Models for One-Step Generation".
     # Network architecture.
     if opts.arch == 'ddpmpp':
         c.network_kwargs.update(model_type='SongUNet', embedding_type='positional', encoder_type='standard', decoder_type='standard')
-        c.network_kwargs.update(channel_mult_noise=1, resample_filter=[1,1], model_channels=128, channel_mult=[2,2,2], gated=opts.gated)
+        c.network_kwargs.update(channel_mult_noise=1, resample_filter=[1,1], model_channels=128, channel_mult=[2,2,2])
     elif opts.arch == 'ncsnpp':
         c.network_kwargs.update(model_type='SongUNet', embedding_type='fourier', encoder_type='residual', decoder_type='standard')
-        c.network_kwargs.update(channel_mult_noise=2, resample_filter=[1,3,3,1], model_channels=128, channel_mult=[2,2,2], gated=opts.gated)
+        c.network_kwargs.update(channel_mult_noise=2, resample_filter=[1,3,3,1], model_channels=128, channel_mult=[2,2,2])
     else:
         assert opts.arch == 'adm'
-        c.network_kwargs.update(model_type='DhariwalUNet', model_channels=192, channel_mult=[1,2,3,4], gated=opts.gated)
+        c.network_kwargs.update(model_type='DhariwalUNet', model_channels=192, channel_mult=[1,2,3,4])
 
     # Preconditioning & loss function.
-    assert opts.precond == 'ambient'
+    assert opts.precond == 'edm'
     #The current SiD code only accepted pretrained edm checkpoint, needs to modify accordingly for the checkpoints of other types of diffusion models
     c.network_kwargs.class_name = 'training.networks.EDMPrecond'
     c.loss_kwargs.class_name = 'training.sid_loss.SID_EDMLoss'
     c.metrics = opts.metrics
-    c.loss_kwargs.norm = opts.norm
 
-  
+    # loss arguments for ambient training
+    # c.loss_kwargs.update(consistency_batch_size_per_gpu=opts.consistency_batch_size // dist.get_world_size())
+    # # whether to use weight for the consistency terms
+    # c.loss_kwargs.update(with_weight=opts.with_weight)
+    # # whether to use gradient for the consistency terms
+    # c.loss_kwargs.update(with_grad=opts.with_grad)
+    # c.loss_kwargs.update(num_consistency_steps=opts.num_consistency_steps)
+    # c.loss_kwargs.update(num_primes=opts.num_primes)
+    # c.loss_kwargs.update(consistency_coeff=opts.consistency_coeff)
 
     # Network options.
     if opts.cbase is not None:
@@ -265,9 +245,9 @@ Pretrained Diffusion Models for One-Step Generation".
 
     c.alpha = opts.alpha
     c.tmax = opts.tmax
-    c.R = opts.corruption_probability
 
     c.data_stat=opts.data_stat
+    c.operator=opts.operator
 
     # Random seed.
     if opts.seed is not None:
@@ -278,11 +258,11 @@ Pretrained Diffusion Models for One-Step Generation".
         c.seed = int(seed)
 
     resume_urls = {
-        # 'cifar10-uncond': 'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl',
-        # 'cifar10-cond': 'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl',
-        # 'ffhq64':     'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-ffhq-64x64-uncond-vp.pkl',
-        # 'afhq64-v2':     'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-afhqv2-64x64-uncond-vp.pkl',
-        # 'imagenet64-cond':    'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-imagenet-64x64-cond-adm.pkl'
+        'cifar10-uncond': 'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-uncond-vp.pkl',
+        'cifar10-cond': 'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl',
+        'ffhq64':     'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-ffhq-64x64-uncond-vp.pkl',
+        'afhq64-v2':     'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-afhqv2-64x64-uncond-vp.pkl',
+        'imagenet64-cond':    'https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-imagenet-64x64-cond-adm.pkl'
     }
 
     if opts.edm_model in resume_urls:
@@ -351,6 +331,7 @@ Pretrained Diffusion Models for One-Step Generation".
             json.dump(c, f, indent=2)
         dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
+    del c.dataset_kwargs.dataset_keep_percentage
     # Train.
     training_loop.training_loop(**c)
 

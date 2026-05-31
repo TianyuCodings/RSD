@@ -114,6 +114,18 @@ Use the Stage 1 `.pkl` as `<teacher_ckpt>` for `run_bash/distill.sh`, and the St
 
 ## Training
 
+### Weights & Biases
+
+Training scripts in `run_bash/`, `mri/`, `operator/`, and `inpainting/` can log to [Weights & Biases](https://wandb.ai). Set your API key before launching (do not hardcode keys in source files):
+
+```bash
+export WANDB_API_KEY=your_api_key_here
+# or persist locally:
+wandb login
+```
+
+Cluster launch scripts (e.g. `inpainting/run_bash/distill_cluster.sh`) expect `WANDB_API_KEY` in the environment; add `wandb login $WANDB_API_KEY` to your job setup if needed.
+
 Before running, set the dataset paths at the top of `run_bash/pretrain.sh` and `run_bash/distill.sh`.
 
 **Recommended**: Check out our paper to see detailed hyperparameters. For most of the settings, we use the default [EDM](https://github.com/NVlabs/edm)   configs for pretraining, and [SiD](https://github.com/mingyuanzhou/sid) configs for distillation without any modification. 
@@ -219,9 +231,25 @@ On an 8× A800 node this completes in ~38 s for generation and ~2 min for FID, y
 
 
 
-## MRI experiments
+## MRI experiments 
 
-Please checkout MRI_README.md
+Please check out the folder `mri` and [MRI_README.md](mri/MRI_README.md)
+
+
+## Deblurring + Super-resolution (with EDM's achitecture)
+
+Please checkout the folder `operator`. The training scripts are in `operator/A_run_bash`
+
+
+## Inpainting (with ambient diffusion's architecture)
+
+Please check out the folder `inpainting`. The pretrained/teacher ckpts are available in Ambient diffusion's codebase, or simple use
+```bash
+wget https://zenodo.org/record/7964925/files/checkpoints.zip?download=1
+```
+For distillation, use the scripts in `./inpainting/run_bash`
+
+
 
 ## TODO
 

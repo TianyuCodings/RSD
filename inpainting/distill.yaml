@@ -1,0 +1,41 @@
+description: distill_random_inpainting
+
+target:
+ service: sing
+ name: vsn-sing-acv-wu2
+ workspace_name: vision-sing-acv-ws01-westus2
+
+
+# target:
+#   service: sing
+#   name: GenAI-Shared-UKSouth2
+#   workspace_name: Singularity-GenAI-WS-UKSouth2
+
+environment:
+  image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
+  setup:
+    - set -x
+    - sudo apt update -y
+    - sudo apt install -y bc
+    - export PATH=/home/aiscuser/.local/bin:$$PATH
+    - pip install numpy>=1.20 click>=8.0 pillow>=8.3.1 scipy>=1.7.1 psutil requests imageio
+    - pip install wandb webdataset seaborn s3fs diffusers imageio-ffmpeg>=0.4.3 pyspng importlib_metadata
+
+storage:
+  output:
+    storage_account_name: vigstandard
+    container_name: data
+    mount_dir: /blob
+
+code:
+  local_dir: ./
+
+jobs:
+  - name: distill_cifar10_random_08
+    sku: 1x32G8-V100-IB-NvLink #1x80G4-A100 
+    process_count_per_node: 1
+    sla_tier: Standard
+    priority: high
+    mpi: False
+    command:
+      - bash run_bash/distill_cluster.sh

@@ -60,7 +60,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--data_stat',     help='Path to the dataset stats', metavar='ZIP|DIR',               type=str, default=None)
 @click.option('--cond',          help='Train class-conditional model', metavar='BOOL',              type=bool, default=False, show_default=True)
 @click.option('--arch',          help='Network architecture', metavar='ddpmpp|ncsnpp|adm',          type=click.Choice(['ddpmpp', 'ncsnpp', 'adm']), default='ddpmpp', show_default=True)
-@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm|ambient',       type=click.Choice(['vp', 've', 'edm', 'ambient']), default='ambient', show_default=True)
+@click.option('--precond',       help='Preconditioning & loss function', metavar='vp|ve|edm',       type=click.Choice(['vp', 've', 'edm']), default='edm', show_default=True)
 
 # Hyperparameters.
 @click.option('--duration',      help='Training duration', metavar='MIMG',                          type=click.FloatRange(min=0, min_open=True), default=200, show_default=True)
@@ -72,17 +72,6 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--dropout',       help='Dropout probability', metavar='FLOAT',                       type=click.FloatRange(min=0, max=1), default=0.13, show_default=True)
 @click.option('--augment',       help='Augment probability', metavar='FLOAT',                       type=click.FloatRange(min=0, max=1), default=0.12, show_default=True)
 @click.option('--xflip',         help='Enable dataset x-flips', metavar='BOOL',                     type=bool, default=False, show_default=True)
-
-# TODO: not sure if we need these two options
-@click.option('--max_grad_norm', help='Max norm for gradients.', metavar='FLOAT', type=click.FloatRange(min=0), default=None, show_default=True)
-@click.option('--weight_decay', help='Value of weight decay. Set to 0. to disable.', metavar='FLOAT', type=click.FloatRange(min=0), default=0., show_default=True)
-
-# Stochastic Sampling
-@click.option('--S_churn',  help='Amount of stochasticity', metavar='S_churn', type=click.FloatRange(min=0, max=float('inf')), default=10.0, show_default=True)
-@click.option('--S_min',  help='Saturation lower bound', metavar='S_min', type=click.FloatRange(min=0, max=1), default=0.01, show_default=True)
-@click.option('--S_max',  help='Saturation upper bound', metavar='S_max', type=click.FloatRange(min=0, max=1), default=1.0, show_default=True)
-@click.option('--S_noise',  help='S_noise', metavar='S_noise', type=click.FloatRange(min=0, max=float('inf')), default=1.007, show_default=True)
-
 
 # Performance-related.
 @click.option('--bench',         help='Enable cuDNN benchmarking', metavar='BOOL',                  type=bool, default=True, show_default=True)
@@ -99,7 +88,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--transfer',      help='Transfer learning from network pickle', metavar='PKL|URL',   type=str)
 @click.option('--resume',        help='Resume from previous training state', metavar='PT',          type=str)
 @click.option('-n', '--dry-run', help='Print training options and exit',                            is_flag=True)
-@click.option('--metrics',       help='Comma-separated list or "none" [default: fid50k_full]',      type=CommaSeparatedList(), default='fid50k_full', show_default=True)
+@click.option('--metrics',       help='Comma-separated list or "none" [default: fid50k_full]',      type=CommaSeparatedList())
 @click.option('--edm_model',     help='edm_model', type=str)
 
 
@@ -119,20 +108,13 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--delta_probability', help='Probability of corrupting a pixel that survived', metavar='FLOAT', default=0.1, show_default=True)
 @click.option('--mask_full_rgb', help='Whether to mask all the RGB channels together', metavar='BOOL', default=False, show_default=True)
 @click.option('--norm', help='Norm for loss', default=2, show_default=True)
-@click.option('--normalize', help='Normalization for training', default=True, show_default=True)
+@click.option('--max_grad_norm', help='Max norm for gradients.', metavar='FLOAT', type=click.FloatRange(min=0), default=None, show_default=True)
 @click.option('--gated', help='Whether to use gated convolutions', metavar='BOOL', default=True, show_default=True)
 @click.option('--corruption_pattern', help='Corruption pattern', metavar='dust|box|downscale|fixed_box', default='dust', show_default=True, required=False)
 @click.option('--max_size', help='Limit training samples.', type=int, default=None, show_default=True)
 
 # wandb
 @click.option('--experiment_name', help='Name for the experiment to run', type=str, default=None, required=False, show_default=True)
-
-
-
-
-
-
-
 
 def main(**kwargs):
     """Distill pretraind diffusion-based generative model using the techniques described in the
@@ -170,37 +152,27 @@ Pretrained Diffusion Models for One-Step Generation".
     opts = dnnlib.EasyDict(kwargs)
     torch.multiprocessing.set_start_method('spawn')
     dist.init()
-    
+
     if dist.get_rank() == 0:
-        if key := os.environ.get("WANDB_API_KEY"):
-            wandb.login(key=key)
         wandb.init(
-            project="ambient_diffusion_mri_sid",
+            project="ambient_diffusion",
             config=kwargs,
             name=opts.experiment_name,
             id=wandb.util.generate_id(),
-            resume="never",
-            entity="ambient_ty"
+            resume="never"
         )
 
 
     # Initialize config dict.
     c = dnnlib.EasyDict()
     c.update(max_grad_norm=opts.max_grad_norm)
-
-    if "numpy" in opts.data:
-        c.dataset_kwargs = dnnlib.EasyDict(class_name='training.dataset.NumpyFolderDataset', path=opts.data, use_labels=opts.cond, xflip=opts.xflip, cache=opts.cache, 
+    c.dataset_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=opts.data, use_labels=opts.cond, xflip=opts.xflip, cache=opts.cache,
                                        corruption_probability=opts.corruption_probability, delta_probability=opts.delta_probability, mask_full_rgb=opts.mask_full_rgb,
-                                       corruption_pattern=opts.corruption_pattern, normalize=opts.normalize, precond=opts.precond)
-    else:
-        c.dataset_kwargs = dnnlib.EasyDict(class_name='training.dataset.ImageFolderDataset', path=opts.data, use_labels=opts.cond, xflip=opts.xflip, cache=opts.cache, 
-                                       corruption_probability=opts.corruption_probability, delta_probability=opts.delta_probability, mask_full_rgb=opts.mask_full_rgb,
-                                       corruption_pattern=opts.corruption_pattern, normalize=opts.normalize)
+                                       corruption_pattern=opts.corruption_pattern)
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, num_workers=opts.workers, prefetch_factor=2)
     c.network_kwargs = dnnlib.EasyDict()
     c.loss_kwargs = dnnlib.EasyDict()
 
-    # TODO: MRI use AdamW when weight_decay is greater than 0
     c.fake_score_optimizer_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=opts.lr, betas=[0.0, 0.999], eps = 1e-8 if not opts.fp16 else 1e-6)
     c.g_optimizer_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', lr=opts.glr, betas=[opts.g_beta1, 0.999], eps = 1e-8 if not opts.fp16 else 1e-6)
 
@@ -234,14 +206,11 @@ Pretrained Diffusion Models for One-Step Generation".
         c.network_kwargs.update(model_type='DhariwalUNet', model_channels=192, channel_mult=[1,2,3,4], gated=opts.gated)
 
     # Preconditioning & loss function.
-    assert opts.precond == 'ambient'
+    assert opts.precond == 'edm'
     #The current SiD code only accepted pretrained edm checkpoint, needs to modify accordingly for the checkpoints of other types of diffusion models
     c.network_kwargs.class_name = 'training.networks.EDMPrecond'
     c.loss_kwargs.class_name = 'training.sid_loss.SID_EDMLoss'
     c.metrics = opts.metrics
-    c.loss_kwargs.norm = opts.norm
-
-  
 
     # Network options.
     if opts.cbase is not None:
@@ -265,7 +234,6 @@ Pretrained Diffusion Models for One-Step Generation".
 
     c.alpha = opts.alpha
     c.tmax = opts.tmax
-    c.R = opts.corruption_probability
 
     c.data_stat=opts.data_stat
 

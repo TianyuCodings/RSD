@@ -3,7 +3,7 @@
 **[ICLR 2026 Poster]** Official PyTorch implementation of:
 
 > **Score Distillation Beyond Acceleration: Generative Modeling from Corrupted Data**  
-> [Yasi Zhang](https://yasminzhang.github.io/)<sup>†</sup>, [Tianyu Chen](https://tianyucodings.github.io/)<sup>†</sup>, Zhendong Wang, Ying Nian Wu, Mingyuan Zhou, [Oscar Leong](https://www.oscarleong.com/publications)  
+> [Yasi Zhang](https://yasminzhang.github.io/)<sup>†</sup>, [Tianyu Chen](https://tianyucodings.github.io/)<sup>†</sup>, Zhendong Wang, Ying Nian Wu, Mingyuan Zhou, [Oscar Leong](https://www.oscarleong.com/)  
 > [arXiv:2505.13377](https://arxiv.org/abs/2505.13377) | [OpenReview](https://openreview.net/forum?id=ROGCckKICU)
 
 ---
@@ -16,61 +16,6 @@ RSD is a two-stage framework for training efficient one-step generative models *
 2. **Stage 2 — Score Distillation:** Distills the teacher into a one-step generator by aligning score functions via a Fisher divergence loss, achieving both faster inference and improved sample quality.
 
 RSD generalizes to a broad class of forward operators including Gaussian denoising, random inpainting, super-resolution, and MRI reconstruction.
-
----
-
-## Results
-
-### Noisy Image Generation (Gaussian noise, σ=0.2)
-
-| Dataset | Teacher (Truncated) FID | **RSD (1-step) FID** |
-|---------|------------------------|----------------------|
-| CIFAR-10 | 12.21 | **4.77** |
-| CelebA-HQ | 13.90 | **6.48** |
-
-### CIFAR-10 Across Noise Levels
-
-| Noise σ | Teacher-Full | Teacher-Truncated | RSD |
-|---------|--------------|-------------------|-----|
-| 0.1 | 25.55 | 7.55 | **3.98** |
-| 0.2 | 60.73 | 12.21 | **4.77** |
-| 0.4 | 124.28 | 22.12 | **21.63** |
-
-### Full Metrics (CIFAR-10, σ=0.2)
-
-| Metric | Teacher | RSD |
-|--------|---------|-----|
-| FID ↓ | 12.21 | **4.77** |
-| IS ↑ | 8.31 | **9.16** |
-| Precision ↑ | 0.59 | **0.65** |
-| Recall ↑ | 0.41 | **0.56** |
-
-### Random Inpainting (CelebA-HQ, noiseless)
-
-| Missing Rate | Teacher FID | RSD FID |
-|-------------|-------------|---------|
-| 60% | 6.08 | **4.44** |
-| 80% | 11.19 | **7.10** |
-| 90% | 25.53 | **16.86** |
-
-![Qualitative results for random inpainting (p=0.9). Each pair shows the corrupted input and the RSD generation output.](figs/figure9.png)
-
-### Multi-coil MRI Reconstruction (FastMRI)
-
-| Acceleration | L1-EDM | Teacher | RSD |
-|-------------|--------|---------|-----|
-| R=2 | 18.55 | 30.34 | **12.95** |
-| R=4 | 27.64 | 32.31 | **10.71** |
-| R=6 | 51.43 | 31.50 | **14.64** |
-| R=8 | 102.98 | 48.15 | **22.51** |
-
-**Sampling speedup:** ~30× faster than the teacher (50k samples in ~20 sec vs. ~10 min on CIFAR-10).
-
----
-
-## Pretrained Models
-
-Coming soon — pretrained checkpoints for CIFAR-10, FFHQ, CelebA-HQ, and AFHQ will be released on HuggingFace.
 
 ---
 
@@ -114,7 +59,10 @@ RSD/
 
 ## Dataset Preparation
 
-Use `scripts/dataset_tool.py` to convert datasets into ZIP format at the desired resolution.
+**Option 1** - download from [yasiz/vision_data](https://huggingface.co/yasiz/vision_data/tree/main)
+
+
+**Option 2** - Use `scripts/dataset_tool.py` to convert datasets into ZIP format at the desired resolution.
 
 **FFHQ (64×64)**
 ```bash
@@ -144,9 +92,31 @@ FID reference statistics can be downloaded from the [EDM release](https://nvlabs
 
 ---
 
+## Checkpoints download
+
+Pretrained checkpoints for noisy image generation (Gaussian noise, σ=0.2) are released as part of the [Denoising Score Distillation collection](https://huggingface.co/collections/yasiz/denoising-score-distillation-ckpts) on Hugging Face.
+
+| Dataset | Stage 1 — Teacher | Stage 2 — RSD (one-step) |
+|---------|-------------------|--------------------------|
+| FFHQ (64×64) | [yasiz/pretrain_corrupt_ffhq_sigma_0.2](https://huggingface.co/yasiz/pretrain_corrupt_ffhq_sigma_0.2) | [yasiz/distill_corrupt_ffhq_sigma_0.2](https://huggingface.co/yasiz/distill_corrupt_ffhq_sigma_0.2) |
+| CelebA-HQ (64×64) | [yasiz/pretrain_corrupt_celebahq_sigma_0.2](https://huggingface.co/yasiz/pretrain_corrupt_celebahq_sigma_0.2) | [yasiz/distill_corrupt_celebahq_sigma_0.2](https://huggingface.co/yasiz/distill_corrupt_celebahq_sigma_0.2) |
+| AFHQ-v2 (64×64) | [yasiz/pretrain_corrupt_afhqv2_sigma_0.2](https://huggingface.co/yasiz/pretrain_corrupt_afhqv2_sigma_0.2) | [yasiz/distill_corrupt_afhqv2_sigma_0.2](https://huggingface.co/yasiz/distill_corrupt_afhqv2_sigma_0.2) |
+
+Download a single checkpoint with the Hugging Face CLI:
+
+```bash
+huggingface-cli download yasiz/distill_corrupt_ffhq_sigma_0.2 --local-dir ckpts/ffhq_rsd
+```
+
+Use the Stage 1 `.pkl` as `<teacher_ckpt>` for `run_bash/distill.sh`, and the Stage 2 `.pkl` with `run_bash/generate_rsd.sh` for one-step generation.
+
+---
+
 ## Training
 
 Before running, set the dataset paths at the top of `run_bash/pretrain.sh` and `run_bash/distill.sh`.
+
+**Recommended**: Check out our paper to see detailed hyperparameters. For most of the settings, we use the default [EDM](https://github.com/NVlabs/edm)   configs for pretraining, and [SiD](https://github.com/mingyuanzhou/sid) configs for distillation without any modification. 
 
 ### Stage 1: Teacher Pretraining
 
@@ -214,9 +184,64 @@ bash run_bash/evaluate.sh <gen_path> <ref_stats.npz> [out.json] [num_gpus]
 
 ---
 
+## Results
+
+### Noisy Image Generation (Gaussian noise, σ=0.2)
+
+| Dataset | Teacher (Truncated) FID | **RSD (1-step) FID** |
+|---------|------------------------|----------------------|
+| CIFAR-10 | 12.21 | **4.77** |
+| CelebA-HQ | 13.90 | **6.48** |
+
+### CIFAR-10 Across Noise Levels
+
+| Noise σ | Teacher-Full | Teacher-Truncated | RSD |
+|---------|--------------|-------------------|-----|
+| 0.1 | 25.55 | 7.55 | **3.98** |
+| 0.2 | 60.73 | 12.21 | **4.77** |
+| 0.4 | 124.28 | 22.12 | **21.63** |
+
+### Full Metrics (CIFAR-10, σ=0.2)
+
+| Metric | Teacher | RSD |
+|--------|---------|-----|
+| FID ↓ | 12.21 | **4.77** |
+| IS ↑ | 8.31 | **9.16** |
+| Precision ↑ | 0.59 | **0.65** |
+| Recall ↑ | 0.41 | **0.56** |
+
+### Random Inpainting (CelebA-HQ, noiseless)
+
+| Missing Rate | Teacher FID | RSD FID |
+|-------------|-------------|---------|
+| 60% | 6.08 | **4.44** |
+| 80% | 11.19 | **7.10** |
+| 90% | 25.53 | **16.86** |
+
+![Qualitative results for random inpainting (p=0.9). Each pair shows the corrupted input and the RSD generation output.](figs/figure9.png)
+
+### Multi-coil MRI Reconstruction (FastMRI)
+
+| Acceleration | L1-EDM | Teacher | RSD |
+|-------------|--------|---------|-----|
+| R=2 | 18.55 | 30.34 | **12.95** |
+| R=4 | 27.64 | 32.31 | **10.71** |
+| R=6 | 51.43 | 31.50 | **14.64** |
+| R=8 | 102.98 | 48.15 | **22.51** |
+
+**Sampling speedup:** ~30× faster than the teacher (50k samples in ~20 sec vs. ~10 min on CIFAR-10).
+
+---
+
+## Pretrained Models
+
+FFHQ, CelebA-HQ, and AFHQ-v2 (σ=0.2) checkpoints are available in the [Denoising Score Distillation collection](https://huggingface.co/collections/yasiz/denoising-score-distillation-ckpts) — see [Checkpoints download](#checkpoints-download) above. CIFAR-10 checkpoints will be released soon.
+
+---
+
 ## TODO
 
-- [ ] Release pretrained checkpoints for noisy CelebA-HQ, FFHQ, and AFHQ
+- [x] Release pretrained checkpoints for noisy CelebA-HQ, FFHQ, and AFHQ
 - [ ] Release code and checkpoints for general operator (deblurring, super-resolution)
 - [ ] Release code and checkpoints for random masking operator (inpainting)
 - [ ] Release code and checkpoints for MRI operator (FastMRI reconstruction)
